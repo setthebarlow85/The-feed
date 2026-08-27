@@ -100,7 +100,10 @@ export function Player() {
   const startPlayback = (card: Card) => {
     stopSpeech();
     bindMediaSession(card);
-    const src = card.audio_url || `/api/tts/${card.script_id}`;
+    const src =
+      card.audio_url && /^https?:\/\//i.test(card.audio_url)
+        ? card.audio_url
+        : `/api/tts/${card.script_id}`;
     void fetch("/api/queue", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -303,6 +306,15 @@ export function Player() {
         playsInline
         preload="auto"
         onEnded={() => void action("ended")}
+        onError={() => {
+          const card = queue?.current;
+          const audio = audioRef.current;
+          if (!card || !audio) return;
+          const tts = `/api/tts/${card.script_id}`;
+          if (audio.src.includes("/api/tts/")) return;
+          audio.src = tts;
+          void audio.play().catch(() => speakFallback(card));
+        }}
         onPlay={() => setPlaying(true)}
         onPause={() => {
           if (audioRef.current && !audioRef.current.ended) setPlaying(false);
