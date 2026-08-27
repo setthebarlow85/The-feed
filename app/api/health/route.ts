@@ -2,6 +2,7 @@ import { openaiConfigured, runtimeEnvironment } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// env-reload
 
 export async function GET() {
   const configured = openaiConfigured();
