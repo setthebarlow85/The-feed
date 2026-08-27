@@ -21,6 +21,9 @@ export async function GET() {
     headers: {
       Authorization: "Bearer " + token,
       "ai-model-id": "openai/tts-1",
+      "ai-speech-model-specification-version": "4",
+      "ai-gateway-protocol-version": "0.0.1",
+      "ai-gateway-auth-method": process.env.AI_GATEWAY_API_KEY ? "api-key" : "oidc",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
