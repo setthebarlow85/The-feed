@@ -1,4 +1,4 @@
-import { getOpenAI } from "./openai";
+import { gatewayToken, getOpenAI, ttsModel, usingGateway } from "./openai";
 import { openaiConfigured } from "./env";
 
 export type TtsResult = {
@@ -37,16 +37,59 @@ export async function generateTts(text: string): Promise<TtsResult> {
 
 async function speakOpenAI(text: string): Promise<TtsResult | null> {
   const openai = getOpenAI();
-  if (!openai) return null;
-  const speech = await openai.audio.speech.create({
-    model: "tts-1",
-    voice: "onyx",
-    input: text.slice(0, 4000),
-    response_format: "mp3",
+  if (openai) {
+    try {
+      const speech = await openai.audio.speech.create({
+        model: ttsModel(),
+        voice: "onyx",
+        input: text.slice(0, 4000),
+        response_format: "mp3",
+      });
+      const buffer = Buffer.from(await speech.arrayBuffer());
+      if (buffer.length >= 1000) {
+        return { buffer, contentType: "audio/mpeg", ext: "mp3" };
+      }
+    } catch {
+      /* try gateway speech REST */
+    }
+  }
+  if (usingGateway()) {
+    const token = gatewayToken();
+    if (token) {
+      const rest = await speakGatewayRest(text, token);
+      if (rest) return rest;
+    }
+  }
+  return null;
+}
+
+async function speakGatewayRest(text: string, token: string): Promise<TtsResult | null> {
+  const res = await fetch("https://ai-gateway.vercel.sh/v4/ai/speech-model", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "ai-model-id": "openai/tts-1",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: text.slice(0, 4000),
+      voice: "onyx",
+      outputFormat: "mp3",
+    }),
+    signal: AbortSignal.timeout(20000),
   });
-  const buffer = Buffer.from(await speech.arrayBuffer());
-  if (buffer.length < 1000) return null;
-  return { buffer, contentType: "audio/mpeg", ext: "mp3" };
+  if (!res.ok) return null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("audio")) {
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length >= 1000) return { buffer, contentType: "audio/mpeg", ext: "mp3" };
+  }
+  const json = (await res.json().catch(() => null)) as { audio?: string } | null;
+  if (json?.audio) {
+    const buffer = Buffer.from(json.audio, "base64");
+    if (buffer.length >= 1000) return { buffer, contentType: "audio/mpeg", ext: "mp3" };
+  }
+  return null;
 }
 
 async function speakGoogle(text: string): Promise<TtsResult | null> {

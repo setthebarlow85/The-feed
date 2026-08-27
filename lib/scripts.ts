@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { execute, get } from "./db";
-import { getOpenAI } from "./openai";
+import { chatModel, getOpenAI } from "./openai";
 import type { ItemRow } from "./rss";
 
 const SYSTEM_PROMPT = `You are a radio writer for a private single-user news station called The Feed.
@@ -46,7 +46,7 @@ export async function writeScriptText(item: ItemRow): Promise<string> {
   try {
     const notes = stripHtml(item.summary || item.content || "").slice(0, 1800);
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: chatModel(),
       temperature: 0.4,
       max_tokens: 320,
       messages: [
