@@ -49,9 +49,9 @@ export async function GET(
         .replace(/^\/api\/audio\//, "")
         .split("/")
         .filter(Boolean);
+      const name = parts[parts.length - 1] || "";
       const existing = readLocalAudio(parts);
-      if (existing) {
-        const name = parts[parts.length - 1] || "";
+      if (existing && !name.endsWith(".wav")) {
         return audioResponse(existing, audioContentType(name));
       }
     }

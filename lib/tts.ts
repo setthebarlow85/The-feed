@@ -73,21 +73,24 @@ async function speakGatewayRest(text: string, token: string): Promise<TtsResult 
     },
     body: JSON.stringify({
       text: text.slice(0, 4000),
-      voice: "onyx",
+      voice: "alloy",
       outputFormat: "mp3",
     }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(45000),
   });
-  if (!res.ok) return null;
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("audio")) {
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.length >= 1000) return { buffer, contentType: "audio/mpeg", ext: "mp3" };
+  const raw = await res.text();
+  if (!res.ok) {
+    console.warn("tts-gateway", res.status, raw.slice(0, 400));
+    return null;
   }
-  const json = (await res.json().catch(() => null)) as { audio?: string } | null;
-  if (json?.audio) {
-    const buffer = Buffer.from(json.audio, "base64");
-    if (buffer.length >= 1000) return { buffer, contentType: "audio/mpeg", ext: "mp3" };
+  try {
+    const json = JSON.parse(raw) as { audio?: string };
+    if (json?.audio) {
+      const buffer = Buffer.from(json.audio, "base64");
+      if (buffer.length >= 500) return { buffer, contentType: "audio/mpeg", ext: "mp3" };
+    }
+  } catch {
+    /* not json */
   }
   return null;
 }
