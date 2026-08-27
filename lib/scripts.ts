@@ -1,8 +1,6 @@
 import { randomUUID } from "crypto";
 import { execute, get } from "./db";
 import { getOpenAI } from "./openai";
-import { saveAudio } from "./audio";
-import { generateTts } from "./tts";
 import type { ItemRow } from "./rss";
 
 const SYSTEM_PROMPT = `You are a radio writer for a private single-user news station called The Feed.
@@ -70,15 +68,6 @@ SOURCE NOTES: ${notes || "(headline only)"}`,
   }
 }
 
-export async function maybeSpeak(scriptId: string, text: string): Promise<string | null> {
-  try {
-    const result = await generateTts(text);
-    return await saveAudio(scriptId, result.buffer, result.contentType, result.ext);
-  } catch {
-    return null;
-  }
-}
-
 export type ScriptRow = {
   id: string;
   item_id: string;
@@ -92,20 +81,12 @@ export async function ensureScript(item: ItemRow): Promise<ScriptRow> {
     "SELECT id, item_id, text, audio_url, duration_sec FROM scripts WHERE item_id = ? ORDER BY created_at DESC LIMIT 1",
     [item.id]
   );
-  if (existing) {
-    if (!existing.audio_url) {
-      const audio_url = await maybeSpeak(existing.id, existing.text);
-      if (audio_url) {
-        await execute("UPDATE scripts SET audio_url = ? WHERE id = ?", [audio_url, existing.id]);
-        existing.audio_url = audio_url;
-      }
-    }
-    return existing;
-  }
+  if (existing) return existing;
 
   const text = await writeScriptText(item);
   const id = randomUUID();
-  const audio_url = await maybeSpeak(id, text);
+  // Speak on first /api/tts hit so enqueue stays inside a Vercel time budget.
+  const audio_url = null;
   const duration_sec = estimateDuration(text);
   await execute(
     `INSERT INTO scripts (id, item_id, text, audio_url, duration_sec, created_at)
