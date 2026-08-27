@@ -10,11 +10,11 @@ import {
 const GATEWAY_BASE = "https://ai-gateway.vercel.sh/v1";
 
 /** Create the OpenAI client at request time. Never instantiate at module load. */
-export function getOpenAI(): OpenAI | null {
+export async function getOpenAI(): Promise<OpenAI | null> {
   if (openaiKeyConfigured()) {
     return new OpenAI({ apiKey: process.env.OPENAI_API_KEY!.trim() });
   }
-  const token = gatewayToken();
+  const token = await gatewayToken();
   if (!token) return null;
   return new OpenAI({
     apiKey: token,

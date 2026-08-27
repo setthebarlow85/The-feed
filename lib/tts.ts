@@ -16,7 +16,7 @@ export async function generateTts(text: string): Promise<TtsResult> {
     .trim()
     .slice(0, 4000) || "The Feed.";
 
-  if (openaiConfigured()) {
+  if (await openaiConfigured()) {
     try {
       const r = await speakOpenAI(input);
       if (r) return r;
@@ -36,7 +36,7 @@ export async function generateTts(text: string): Promise<TtsResult> {
 }
 
 async function speakOpenAI(text: string): Promise<TtsResult | null> {
-  const openai = getOpenAI();
+  const openai = await getOpenAI();
   if (openai) {
     try {
       const speech = await openai.audio.speech.create({
@@ -54,7 +54,7 @@ async function speakOpenAI(text: string): Promise<TtsResult | null> {
     }
   }
   if (usingGateway()) {
-    const token = gatewayToken();
+    const token = await gatewayToken();
     if (token) {
       const rest = await speakGatewayRest(text, token);
       if (rest) return rest;

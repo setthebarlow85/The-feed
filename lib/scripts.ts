@@ -41,7 +41,7 @@ export function extractiveScript(item: ItemRow): string {
 }
 
 export async function writeScriptText(item: ItemRow): Promise<string> {
-  const openai = getOpenAI();
+  const openai = await getOpenAI();
   if (!openai) return extractiveScript(item);
   try {
     const notes = stripHtml(item.summary || item.content || "").slice(0, 1800);
