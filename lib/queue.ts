@@ -58,6 +58,7 @@ export async function listQueue(): Promise<QueueCard[]> {
       ...r,
       fringe: Boolean(r.fringe),
       metadata_only: Boolean(r.metadata_only),
+      audio_url: r.audio_url || `/api/tts/${r.script_id}`,
     }))
   );
 }

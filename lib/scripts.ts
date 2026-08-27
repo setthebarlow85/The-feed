@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { execute, get } from "./db";
-import { getOpenAI, openaiConfigured } from "./openai";
+import { getOpenAI } from "./openai";
 import { saveAudio } from "./audio";
+import { generateTts } from "./tts";
 import type { ItemRow } from "./rss";
 
 const SYSTEM_PROMPT = `You are a radio writer for a private single-user news station called The Feed.
@@ -70,18 +71,9 @@ SOURCE NOTES: ${notes || "(headline only)"}`,
 }
 
 export async function maybeSpeak(scriptId: string, text: string): Promise<string | null> {
-  if (!openaiConfigured()) return null;
-  const openai = getOpenAI();
-  if (!openai) return null;
   try {
-    const speech = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: "onyx",
-      input: text.slice(0, 4000),
-      response_format: "mp3",
-    });
-    const buf = Buffer.from(await speech.arrayBuffer());
-    return await saveAudio(scriptId, buf);
+    const result = await generateTts(text);
+    return await saveAudio(scriptId, result.buffer, result.contentType, result.ext);
   } catch {
     return null;
   }
@@ -100,7 +92,16 @@ export async function ensureScript(item: ItemRow): Promise<ScriptRow> {
     "SELECT id, item_id, text, audio_url, duration_sec FROM scripts WHERE item_id = ? ORDER BY created_at DESC LIMIT 1",
     [item.id]
   );
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.audio_url) {
+      const audio_url = await maybeSpeak(existing.id, existing.text);
+      if (audio_url) {
+        await execute("UPDATE scripts SET audio_url = ? WHERE id = ?", [audio_url, existing.id]);
+        existing.audio_url = audio_url;
+      }
+    }
+    return existing;
+  }
 
   const text = await writeScriptText(item);
   const id = randomUUID();

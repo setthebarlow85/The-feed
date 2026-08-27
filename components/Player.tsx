@@ -79,28 +79,7 @@ export function Player() {
     });
   };
 
-  const playCard = async (card: Card) => {
-    stopSpeech();
-    bindMediaSession(card);
-    await fetch("/api/queue", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queue_id: card.queue_id }),
-    }).catch(() => undefined);
-
-    if (card.audio_url && audioRef.current) {
-      audioRef.current.src = card.audio_url;
-      try {
-        await audioRef.current.play();
-        setPlaying(true);
-        setStatus("On air");
-      } catch {
-        setStatus("Tap PLAY — browser blocked autoplay");
-        setPlaying(false);
-      }
-      return;
-    }
-
+  const speakFallback = (card: Card) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       const utter = new SpeechSynthesisUtterance(card.text);
       utter.rate = 1.02;
@@ -114,8 +93,34 @@ export function Player() {
       setStatus("On air · live voice");
       return;
     }
-
     setStatus("No audio engine on this device");
+    setPlaying(false);
+  };
+
+  const startPlayback = (card: Card) => {
+    stopSpeech();
+    bindMediaSession(card);
+    const src = card.audio_url || `/api/tts/${card.script_id}`;
+    void fetch("/api/queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queue_id: card.queue_id }),
+    }).catch(() => undefined);
+
+    const audio = audioRef.current;
+    if (audio) {
+      audio.preload = "auto";
+      audio.setAttribute("playsinline", "true");
+      audio.src = src;
+      setPlaying(true);
+      setStatus("On air");
+      const attempt = audio.play();
+      if (attempt && typeof attempt.catch === "function") {
+        attempt.catch(() => speakFallback(card));
+      }
+      return;
+    }
+    speakFallback(card);
   };
 
   const togglePlay = async () => {
@@ -126,21 +131,23 @@ export function Player() {
       setStatus("Paused");
       return;
     }
-    let data = queue;
-    if (!data?.current) {
-      setBusy(true);
-      setStatus("Tuning the stack…");
-      try {
-        data = await loadQueue();
-      } finally {
-        setBusy(false);
-      }
+    if (current) {
+      startPlayback(current);
+      return;
+    }
+    setBusy(true);
+    setStatus("Tuning the stack…");
+    let data: QueuePayload | null = null;
+    try {
+      data = await loadQueue();
+    } finally {
+      setBusy(false);
     }
     if (!data?.current) {
       setStatus("Empty queue — seed from Admin");
       return;
     }
-    await playCard(data.current);
+    startPlayback(data.current);
   };
 
   const action = async (type: string) => {
@@ -162,7 +169,7 @@ export function Player() {
         setStatus("Rabbit hole · " + data.rabbit_added + " related");
       }
       if (data.current && (playingRef.current || type === "ended" || type === "skip")) {
-        await playCard(data.current);
+        startPlayback(data.current);
       } else {
         setPlaying(false);
       }
@@ -219,7 +226,7 @@ export function Player() {
       <section className="dial mx-auto flex aspect-square w-[min(86vw,22rem)] flex-col items-center justify-center rounded-full">
         <button
           onClick={() => void togglePlay()}
-          disabled={busy || booting}
+          disabled={busy || (booting && !current)}
           className={`flex items-center justify-center rounded-full bg-amber-400 font-display font-extrabold tracking-[0.2em] text-black shadow-[0_0_40px_rgba(232,163,23,0.45)] active:scale-95 disabled:opacity-50 ${drive ? "h-48 w-48 text-5xl" : "h-36 w-36 text-4xl"}`}
         >
           {playing ? "PAUSE" : "PLAY"}
@@ -294,6 +301,7 @@ export function Player() {
       <audio
         ref={audioRef}
         playsInline
+        preload="auto"
         onEnded={() => void action("ended")}
         onPlay={() => setPlaying(true)}
         onPause={() => {
